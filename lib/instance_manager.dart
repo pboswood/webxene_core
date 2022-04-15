@@ -96,8 +96,8 @@ class InstanceManager {
 	String get defaultSecurecode => _instanceConfig['defaultSecurecode'] ?? '';
 
 	// Get a schema type by ID or type string, after instance initialization.
-	schemaById(int id) => _schemasById.containsKey(id) ? _schemasById[id] : throw Exception("Failed to load schema #$id");
-	schemaByType(String type) => _schemasByType.containsKey(type) ? _schemasByType[type] : throw Exception("Failed to load schema '$type'");
+	Schema schemaById(int id) => _schemasById.containsKey(id) ? _schemasById[id] as Schema : throw Exception("Failed to load schema '$id'");
+	Schema schemaByType(String type) => _schemasByType.containsKey(type) ? _schemasByType[type] as Schema : throw Exception("Failed to load schema '$type'");
 
 	// Create our schema objects from a JSON list and assign them to our lookup maps.
 	hydrateSchemas(List<dynamic> schemas) {

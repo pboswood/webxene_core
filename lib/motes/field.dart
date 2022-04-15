@@ -4,6 +4,14 @@ class Field {
 	String title = "";          // Label for this field
 	String type = "";           // Typing string for this field.
 	String position = "";       // Positioning string for this field (deprecated).
-	dynamic defaultValue;       // Default value (or NULL) for this field. May not apply to all types.
+	dynamic defaultValue;       // Default value (or null) for this field. May not apply to all types.
+
+	Field.fromJson(Map<String, dynamic> json) {
+		field = json['field'];
+		title = json['title'];
+		type = json['type'];
+		position = json['position'] ?? '';
+		defaultValue = json['defaultValue'];        // (May be null!)
+	}
 }
 

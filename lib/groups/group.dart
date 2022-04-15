@@ -9,6 +9,12 @@ class Group {
 	int? highestReserved;                   // Highest mote in conversations
 	Map<String, dynamic> options = {};      // JSON for advanced group options
 
+	// Values passed in user's main group list fetch, that may not exist elsewhere.
+	int? lastVisit;                         // Last visit time as UNIX timestamp for logged in user.
+	int? memberCount;                       // Number of members in this group at time of fetch.
+	int? outstanding;                       // Outstanding items count for logged in user.
+
+
 	// Menu implementation - Page objects are also stored in our group manager for
 	// direct fetching, but remain in a ordered list here as well for menu rendering.
 	// Note that pages fetched in the menu are generally contain only a subset of the
@@ -26,7 +32,10 @@ class Group {
 		highestReserved = json['highest_reserved'];
 		options = json['options'] == null ? {} : jsonDecode(json['options']);
 		// TODO: Deal with 'outstanding' parameter for tracking unread pages.
-		_amAdmin = json['am_admin'];
+		_amAdmin = json['am_admin'] ?? false;
+
+		lastVisit = json['last_visits'];
+		memberCount = json['membercount'];
 
 		// Parse out menu as well if it exists.
 		if (json['menu'] != null && json['menu'] is List) {

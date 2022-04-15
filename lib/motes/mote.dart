@@ -1,5 +1,7 @@
 import "dart:collection";
 import 'dart:convert';
+import 'package:tuple/tuple.dart';
+import '../instance_manager.dart';
 import '../auth_manager.dart';
 import "mote_comment.dart";
 import '../crypto/mote_crypto.dart';
@@ -57,19 +59,19 @@ class Mote with MoteCrypto {
 		}
 	}
 
-	// Generate string CSV representation of mote payload (headers)?
-	// TODO: Where should this be? Ideally we want a schema abstraction, but not all motes MATCH schema!
-	String motePayloadHeadersCSV() {
-		SplayTreeMap<String, dynamic> orderedPayload = SplayTreeMap.from(payload, (a,b) => a.compareTo(b));
-		orderedPayload.removeWhere((key, value) => !(key == 'title' || key.startsWith('cf_')));
-		return orderedPayload.keys.join(";");
-	}
-
-	// Generate string CSV representation of mote payload.
-	String motePayloadCSV() {
-		SplayTreeMap<String, dynamic> orderedPayload = SplayTreeMap.from(payload, (a,b) => a.compareTo(b));
-		orderedPayload.removeWhere((key, value) => !(key == 'title' || key.startsWith('cf_')));
-		return orderedPayload.values.join(";");
+	// Helper function to get string representations of a mote's headers + payload CSV for UI.
+	static Tuple2<String, List<String>> interpretMotesCSV(List<Mote> motes) {
+		final uniqueTypes = motes.map((m) => m.typeId).toSet().toList();
+		if (uniqueTypes.length > 1) {
+			throw UnimplementedError("Cannot automatically interpret list of motes with multiple types yet!");
+		}
+		try {
+			final schema = InstanceManager().schemaById(uniqueTypes.first);
+			return Tuple2(schema.schemaHeadersCSV, motes.map((m) => schema.interpretMoteCSV(m)).toList());
+		} catch (ex) {
+			// TODO: Rewarn on this and fallback to common fields only?
+			rethrow;
+		}
 	}
 
 }

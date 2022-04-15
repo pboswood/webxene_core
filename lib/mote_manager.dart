@@ -63,10 +63,23 @@ class MoteManager {
 
 			final List<Mote> returnMotes = [];
 			final fetchMotes = fetchRequest.result as List;
+			// Multi-threaded implementation, broken!
+			/*
+			await Future.forEach(fetchMotes, (m) {
+				Mote initializedMote = Mote.fromEncryptedJson(m as Map<String, dynamic>);
+				initializedMote.decryptMote().then((_) {        // (decryptMote has Future<void> return)
+					returnMotes.add(initializedMote);
+					_moteCache[initializedMote.id] = initializedMote;
+				});
+			});
+			*/
+
+			// Single-threaded implementation.
+			var timerInterpret = Stopwatch()..start();
 			for (var m in fetchMotes) {
 				try {
 					Mote initializedMote = Mote.fromEncryptedJson(m);
-					await initializedMote.decryptMote(); // TODO: Can we multi-thread this by using Promise.all dart-equiv?
+					await initializedMote.decryptMote();
 					returnMotes.add(initializedMote);
 					_moteCache[initializedMote.id] = initializedMote;
 				} catch (ex) {
@@ -74,6 +87,8 @@ class MoteManager {
 					print(ex);
 				}
 			}
+			timerInterpret.stop();
+			print("Elapsed decrypt/interpret (single-thread): " + timerInterpret.elapsedMilliseconds.toString() + "ms.");
 
 			return returnMotes;
 		} catch (ex) {

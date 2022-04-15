@@ -1,7 +1,9 @@
 import "dart:collection";
 import 'dart:convert';
+import '../motes/mote_column.dart';
 import '../motes/mote.dart';
 
+// Right now the Page is really a CarddeckPage - we don't implement other Page types yet.
 class Page {
 	int id = 0;                             // ID of the page object
 	String name = '';                       // Full title name of this page
@@ -18,6 +20,7 @@ class Page {
 	bool _partial = true;                   // If this is partial data (from a group menu fetcher), or full data from page fetch.
 	get isPartialData => _partial;
 	List<Mote> cachedMotes = [];            // List of cached motes from a full fetch of this page.
+	Map<int, MoteColumn> columns = {};      // Ordered map of columns, with unique column ID. Column IDs are NOT reused after deletion!
 
 	// Parse a page from JSON, which may come from a menu item (from group fetch),
 	// or direct page fetch. The menu item will have less data.
@@ -34,5 +37,27 @@ class Page {
 		icon = json['icon'] ?? '';
 		menuName = json['menu_name'] ?? '';
 		_partial = partialData;
+
+		// Attempt to initialize carddeck options. TODO: Refactor into CarddeckPage.
+		if (!_partial && type == 'carddeck') {
+			initializeAsCarddeck();
+		}
 	}
+
+	initializeAsCarddeck() {
+		// TODO: Option autoOpenSearch?
+		try {
+			List<dynamic> categories = options['categories'];
+			for (var category in categories) {
+				var column = MoteColumn.fromCarddeckOptions(this, category);
+				columns[column.id] = column;
+			}
+		} catch (ex) {
+			rethrow;
+		}
+	}
+
+
+
+
 }

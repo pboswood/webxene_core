@@ -1,3 +1,5 @@
+import 'dart:collection';
+import 'dart:convert';
 import 'field.dart';
 import 'mote.dart';
 
@@ -32,5 +34,53 @@ class Schema {
 		titleDefault = json['titledefault'] ?? '';
 		casting = json['casting'] ?? '';
 		htmlBody = json['htmlbody'] ?? '';
+
+		// JSON spec is delivered as a string here and must be decoded.
+		if (json['spec'] != null && json['spec'] is String) {
+			final jsonSpec = jsonDecode(json['spec']);
+			if (jsonSpec != null && jsonSpec is List) {
+				for (var specItem in jsonSpec) {
+					spec.add(Field.fromJson(specItem));
+				}
+			}
+		}
+	}
+
+	// Common fields that exist in all mote schema types.
+	static const List<String> commonFields = [ 'title' ];
+
+	// Generate (cached) CSV representation of this mote's payload headers, for our UI layer.
+	String get schemaHeadersCSV => _cachedHeadersCSV == null ? _schemaHeadersCSV() : _cachedHeadersCSV!;
+	String? _cachedHeadersCSV = null;
+	String _schemaHeadersCSV() {
+		if (spec.isEmpty) {
+			throw UnimplementedError("Handling non-schema motes is not implemented yet!");
+		}
+		final orderedHeaders = spec.map((field) => 'cf_' + field.field).toList();
+		orderedHeaders.addAll(commonFields);
+		_cachedHeadersCSV = orderedHeaders.join(',');
+		return _cachedHeadersCSV!;
+	}
+
+	// Interpret a mote according to it's schema for UI layer, returning CSV representation
+	// in same order as the schemaHeadersCSV() return.
+	String interpretMoteCSV(Mote mote) {
+		if (spec.isEmpty) {
+			throw UnimplementedError("Handling non-schema motes is not implemented yet!");
+		}
+		final orderedPayload = spec.map((field) {
+			var fieldKey = 'cf_' + field.field;
+			if (!mote.payload.containsKey(fieldKey)) {
+				return '';
+			}
+			// TODO: Deal with internal JSON, all other field constructs, etc.
+			return mote.payload[fieldKey]!.toString();
+		}).toList();
+
+		orderedPayload.addAll(commonFields.map((commonField) {
+			return mote.payload[commonField] ?? '';
+		}));
+
+		return orderedPayload.join(';');
 	}
 }
