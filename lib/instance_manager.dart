@@ -1,6 +1,7 @@
 // Singleton class to store instance and configuration details.
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:webxene_core/auth_manager.dart';
 import 'motes/schema.dart';
 
 class InstanceManager {
@@ -41,7 +42,7 @@ class InstanceManager {
 			throw Exception("Instance manager has no host setup!");
 		}
 		final bool useUnsecure = _instanceConfig['DEBUG_HTTP'] ?? false;
-		print("API request: " + (useUnsecure ? "Using HTTP" : "Using HTTPS"));
+		print("API Request [" + (useUnsecure ? 'HTTP' : 'HTTPS') + "] " + route);
 		return Uri(
 			scheme: useUnsecure ? 'http' : 'https',
 			host: _instanceHost,
@@ -61,8 +62,8 @@ class InstanceManager {
 		}
 		final reqPath = InstanceManager().apiPath(route, parameters, method);
 		final reqHeaders = {
-			'Accept': 'application/json',
-			'Authorization': 'Bearer ' + 'alice-----',
+			...AuthManager().authTokenHeaders,
+			'Accept': 'application/json'
 		};
 		final reqHttp = method == 'GET' ?
 			http.get(reqPath, headers: reqHeaders) :
@@ -73,15 +74,27 @@ class InstanceManager {
 	// Make an async request to an enclave endpoint via our API, used for key backup/recovery operations.
 	// Returns the raw HTTP response, as this may or may not be JSON data.
 	Future<http.Response> enclaveRequestRaw(String route, [Map<String, dynamic>? parameters]) {
-		print(parameters);
 		// TODO: How can we define our enclave URI? We don't pass this is any way normally via instance config!
-		const String enclaveRoot = 'netxene-enclave.cirii.org';
+		var enclaveRoot = "";
+		var enclavePath = route.substring(0, 1) == '/' ? route.substring(1) : route;
+		switch(_instanceHost) {
+			case 'netxene.cirii.org':
+				enclaveRoot = 'netxene-enclave.cirii.org';
+				break;
+			case 'crm.sevconcept.ch':
+				enclaveRoot = _instanceHost;
+				enclavePath = 'enclave/' + enclavePath;
+				break;
+			default:
+				throw Exception("Undefined enclave for hostname '${_instanceHost}; pre-defined settings are required for now!");
+		}
+
 		final bool useUnsecure = _instanceConfig['DEBUG_HTTP'] ?? false;
-		print("Enclave request: " + (useUnsecure ? "Using HTTP" : "Using HTTPS"));
+		print("Enclave Request [" + (useUnsecure ? 'HTTP' : 'HTTPS') + "] " + route);
 		final enclaveUri = Uri(
 			scheme: useUnsecure ? 'http' : 'https',
 			host: enclaveRoot,
-			path: (route.substring(0, 1) == '/' ? route.substring(1) : route),
+			path: enclavePath,
 			queryParameters:  null,
 		);
 		// All enclave requests are POST requests.

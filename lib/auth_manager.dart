@@ -59,6 +59,7 @@ class AuthManager {
 	User loggedInUser = User();             // Last user we logged in as successfully, or empty user.
 
 	String _apiToken = '';                  // API token for this login session.
+	Map<String, String> get authTokenHeaders => _apiToken == '' ? {} : { 'Authorization': 'Bearer ' + _apiToken };
 
 	// Temporary login sequence that bypasses AuthState to do everything in one step.
 	// TODO: Fix this to use separate pages, as required by 2FA/TOTP and other uses.
@@ -167,7 +168,7 @@ class AuthManager {
 		if (backupFetch.statusCode == 200) {
 			return jsonDecode(backupFetch.body);
 		} else {
-			throw Exception("Failed to fetch recovery key from secure enclave: ${backupFetch.statusCode}: {$backupFetch.backupFetch.reasonPhrase ?? 'Unknown error'}");
+			throw Exception("Failed to fetch recovery key from secure enclave: ${backupFetch.statusCode}: ${backupFetch.reasonPhrase ?? 'Unknown error'}");
 		}
 	}
 

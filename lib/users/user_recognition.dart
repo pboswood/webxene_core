@@ -10,6 +10,9 @@ class UserRecognition {
 	bool totpEnabled = false;   // If 2FA is required to process a login.
 
 	UserRecognition.fromJson(Map<String, dynamic> json) {
+		json['password_empty'] ??= 0;
+		json['totp_enabled'] ??= 0;
+
 		id = json['id'];
 		recognition = json['recognition'];
 		passwordEmpty = json['password_empty'] == 0 ? false : true;
