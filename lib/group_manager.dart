@@ -65,13 +65,19 @@ class GroupManager {
 	}
 
 	// Fetch complete details on a single page, which also automatically gives us a preliminary mote list.
-	Future<Page> fetchPageAndMotes(int pageId, { bool forceRefresh = false }) async {
+	// If we are viewing a subpage that needs to be filtered by a mote, it must be provided as the 'subviewMote' parameter!
+	Future<Page> fetchPageAndMotes(int pageId, { bool forceRefresh = false, subviewMote = 0 }) async {
 		// Use page cache if we have a non-partial result.
 		if (!forceRefresh && _pageCache.containsKey(pageId) && !_pageCache[pageId]!.isPartialData) {
-			return _pageCache[pageId]!;
+			// TODO: Caching for subviewMote pages?
+			if (subviewMote == 0) {
+				return _pageCache[pageId]!;
+			}
 		}
 
-		final apiPage = await InstanceManager().apiRequest('pages/' + pageId.toString());
+		final apiPage = await InstanceManager().apiRequest('pages/' + pageId.toString(), {
+			'subview': subviewMote.toString(),
+		});
 		if (!apiPage.success(APIResponseJSON.map)) {
 			throw Exception("Failed to fetch page (error " + apiPage.response.statusCode.toString() + ")");
 		}

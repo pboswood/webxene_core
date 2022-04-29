@@ -5,22 +5,24 @@ import '../instance_manager.dart';
 import '../auth_manager.dart';
 import "mote_comment.dart";
 import '../crypto/mote_crypto.dart';
+import 'mote_relation.dart';
 
 class Mote with MoteCrypto {
 	int id = 0;
 	Map<String, dynamic> payload = {};
 	Queue<MoteComment> comments = Queue();
+	List<MoteRelation> relationships = [];      // (stores all relationships involving this mote, including reverse relationships)
 	int typeId = 0;                 // Schema type ID
 	int seqId = 0;                  // Version sequence ID, incremented by one each update.
 	String dockey = "";             // Dockey for ourselves as B64 (we don't store generated dockeys for others)
 	String payloadEncrypted = "";   // Encrypted payload as String JSON.
 
 	// Targeting for motes
-	int sourceId = 0;           // Source user this mote is from
-	int targetId = 0;           // Destination user/group
-	bool groupType = false;     // If destination is a group
-	int domainId = 0;           // Conversation ID or page ID if groupType.
-	int folderId = 0;           // Folder for drive motes, 0 indicates root folder.
+	int sourceId = 0;               // Source user this mote is from
+	int targetId = 0;               // Destination user/group
+	bool groupType = false;         // If destination is a group
+	int domainId = 0;               // Conversation ID or page ID if groupType.
+	int folderId = 0;               // Folder for drive motes, 0 indicates root folder.
 
 	Mote();         // Empty constructor can use default id=0 to initialize new motes.
 
@@ -36,6 +38,7 @@ class Mote with MoteCrypto {
 		groupType = (json['group_type'] ?? 0) == 0 ? false : true;
 		domainId = json['domain_id'] ?? 0;
 		folderId = json['folder_id'] ?? 0;
+		relationships = json['relationships'] == null ? [] : (json['relationships'] as List).map((r) => MoteRelation.fromJson(r, id)).toList();
 	}
 
 	// Decrypt a mote from the encrypted values loaded by our constructor, as the current user.

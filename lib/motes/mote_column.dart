@@ -1,6 +1,6 @@
 import 'dart:collection';
-
-import 'package:webxene_core/motes/filter.dart';
+import 'filter.dart';
+import 'sort_method.dart';
 import '../groups/page.dart';
 import '../instance_manager.dart';
 import 'mote.dart';
@@ -14,6 +14,7 @@ class MoteColumn {
 	String title = '';                  // Title / label for this column
 	List<Schema> schemas = [];          // List of schemas visible in this column.
 	List<Filter> filters = [];          // List of filters active for this column.
+	List<SortMethod> sortMethods = [];  // List of sorting methods active for this column.
 
 	Set<int> get validSchemaIds {
 		_validSchemaIdsCache ??= schemas.map((s) => s.id).toSet();
@@ -27,13 +28,15 @@ class MoteColumn {
 	MoteColumn.fromCarddeckOptions(this.page, Map<String, dynamic> categoryData) {
 		id = categoryData['id'] is String ? int.parse(categoryData['id']) : categoryData['id'];
 		title = categoryData['title'];
-		for (var source in (categoryData['sources'] as List)) {
-			var schema = InstanceManager().schemaByType(source as String);
-			schemas.add(schema);
+		if (categoryData['sources'] != null && categoryData['sources'] is List) {
+			for (var source in (categoryData['sources'] as List)) {
+				var schema = InstanceManager().schemaByType(source as String);
+				schemas.add(schema);
+			}
 		}
 	}
 
-	// Get a list of all 'filters' possible for this column.
+	// Get a list of all 'filters' possible for this column. This can also be used to provide sort methods.
 	List<String> allPossibleFilters() {
 		// Get a list of list of headers from CSV.
 		final listsOfHeaders = schemas.map((s) => s.schemaHeadersCSV.split(',')).toList();
@@ -47,7 +50,11 @@ class MoteColumn {
 	// Return a filtered and sorted view of motes from within our parent page via this column.
 	List<Mote> getMoteView() {
 		final filteredMotes = page.cachedMotes.where(_filterWhere).toList();
-		filteredMotes.sort((a, b) => a.id - b.id);
+		if (sortMethods.isEmpty) {
+			filteredMotes.sort(SortMethod.defaultComparator);
+		} else {
+			filteredMotes.sort(_sortMultipleComparators);
+		}
 		return filteredMotes;
 	}
 
@@ -68,6 +75,16 @@ class MoteColumn {
 		return true;
 	}
 
+	// Generic sorting method that allows use of multiple comparators to sort.
+	int _sortMultipleComparators(Mote a, Mote b) {
+		int compareResult = 0;
+		for (int i = 0; i < sortMethods.length; i++) {
+			compareResult = sortMethods[i].comparator(a, b);
+			if (compareResult != 0) {
+				return compareResult;
+			}
 
+		}
+		return SortMethod.defaultComparator(a, b);
+	}
 }
-
