@@ -13,5 +13,11 @@ class Field {
 		position = json['position'] ?? '';
 		defaultValue = json['defaultValue'];        // (May be null!)
 	}
+
+	// Check if field type matches any reference, a reverse reference, or a user reference.
+	bool get isReference => (type == 'reverseref' || type.endsWith('[]'));
+	bool get isReverseReference => type == 'reverseref';
+	bool get isUserReference => type == '_user[]';
+
 }
 

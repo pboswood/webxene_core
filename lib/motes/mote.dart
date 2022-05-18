@@ -1,8 +1,10 @@
 import "dart:collection";
 import 'dart:convert';
 import 'package:tuple/tuple.dart';
+import '../mote_manager.dart';
 import '../instance_manager.dart';
 import '../auth_manager.dart';
+import '../user_manager.dart';
 import "mote_comment.dart";
 import '../crypto/mote_crypto.dart';
 import 'mote_relation.dart';
@@ -38,13 +40,20 @@ class Mote with MoteCrypto {
 		groupType = (json['group_type'] ?? 0) == 0 ? false : true;
 		domainId = json['domain_id'] ?? 0;
 		folderId = json['folder_id'] ?? 0;
-		relationships = json['relationships'] == null ? [] : (json['relationships'] as List).map((r) => MoteRelation.fromJson(r, id)).toList();
+		relationships = json['relationships'] == null ? [] :
+			(json['relationships'] as List).map((r) => MoteRelation.fromMoteJson(r, this)).toList();
+		// Motes may also contain internal attribution info if from specific sources,
+		// we can automatically cache these details if we get them.
+		if (json['attrib'] != null && json['attrib'] is Map) {
+			UserManager().autoloadAttributionMap(json['attrib'] as Map<String, dynamic>);
+		}
 	}
 
 	// Decrypt a mote from the encrypted values loaded by our constructor, as the current user.
 	Future<void> decryptMote() async {
 		try {
 			payload = await decryptMotePayload(AuthManager().loggedInUser, dockey, payloadEncrypted);
+			normalizeRelationships();
 			// TODO: Deal with comments, relationships
 		} catch(ex) {
 			rethrow;
@@ -74,6 +83,70 @@ class Mote with MoteCrypto {
 		} catch (ex) {
 			// TODO: Rewarn on this and fallback to common fields only?
 			rethrow;
+		}
+	}
+
+	// Fill relations into payload, overriding existing payload entries with the actual MoteRelation object.
+	// This makes it easier to lookup relationships, etc. using purely the payload. However, Mote.retrieveReferences()
+	// must still be called in order to finalize the mote relationship IDs into actual Mote objects.
+	void normalizeRelationships() {
+		Set<String> warnedFieldKeys = {};
+		String fieldKey;
+
+		for (var r in relationships) {
+			fieldKey = r.relationFieldKey(id);
+			if (!warnedFieldKeys.contains(fieldKey)) {
+				warnedFieldKeys.add(fieldKey);
+				if (payload[fieldKey] != null) {
+					print("Warning: overriding payload[$fieldKey] with MoteRelation data list!");
+				}
+				payload[fieldKey] = <MoteRelation>[];
+			}
+			(payload[fieldKey] as List<MoteRelation>).add(r);
+		}
+	}
+
+	// Function to retrieve any mote and user relation references that might be needed and cache them.
+	// This automatically fills in the MoteRelation references that can be followed for a series of motes.
+	static Future<void> retrieveReferences(List<Mote> targetMotes, int gid) async {
+		// Get a list of all MoteRelations in our targetMotes that are not already fetched.
+		final List<MoteRelation> relations = [];
+		for (var m in targetMotes) {
+			for (var r in m.relationships) {
+				if (r.referencedSource == null || r.referencedTarget == null) {
+					relations.add(r);
+				}
+			}
+		}
+
+		// Request cached-fetch of all mentioned motes. Note that some (or all) references may be
+		// user-references, which are fetched separately.
+		final mentionedMotes = HashSet<int>();
+		final mentionedUsers = HashSet<int>();
+		for (var r in relations) {
+			// Source is ALWAYS a mote!
+			mentionedMotes.add(r.sourceId);
+			// Target may be a user or mote.
+			if (r.isUserTarget) {
+				mentionedUsers.add(r.targetId);
+			} else {
+				mentionedMotes.add(r.targetId);
+			}
+		}
+		print("Reference fetch: ${mentionedMotes.length} motes, ${mentionedUsers.length} users");
+		try {
+			// NB: Returns for below fetches discarded; we only want motes to cache!
+			await Future.wait([
+				MoteManager().fetchMotes(mentionedMotes.toList(), gid),
+				UserManager().ensureCachedAttribution(mentionedUsers.toList()),
+			]);
+		} catch (ex) {
+			rethrow;
+		}
+
+		// Fulfill relationship references for each relation object from mote cache.
+		for (var r in relations) {
+			r.fillReferences();
 		}
 	}
 

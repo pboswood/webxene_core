@@ -16,6 +16,9 @@ class MoteColumn {
 	List<Filter> filters = [];          // List of filters active for this column.
 	List<SortMethod> sortMethods = [];  // List of sorting methods active for this column.
 
+	List<Mote> _moteView = [];          // List of cachedMotes from page that have been pre-filtered and sorted.
+	bool _moteViewCalculated = false;   // If we have calculated the mote view (sanity check)
+
 	Set<int> get validSchemaIds {
 		_validSchemaIdsCache ??= schemas.map((s) => s.id).toSet();
 		return _validSchemaIdsCache!;
@@ -47,16 +50,61 @@ class MoteColumn {
 		return flattenHeaders.where((val) => seenSet.add(val)).toList();        // (set add will return true if insertion succeeded)
 	}
 
-	// Return a filtered and sorted view of motes from within our parent page via this column.
-	List<Mote> getMoteView() {
-		final filteredMotes = page.cachedMotes.where(_filterWhere).toList();
-		if (sortMethods.isEmpty) {
-			filteredMotes.sort(SortMethod.defaultComparator);
-		} else {
-			filteredMotes.sort(_sortMultipleComparators);
-		}
-		return filteredMotes;
+	// Compute a view upon this column with a new set of filters/sort methods.
+	void calculateMoteView() {
+		_moteView = page.cachedMotes.where(_filterWhere).toList();
+		_moteView.sort(sortMethods.isEmpty ? SortMethod.defaultComparator : _sortMultipleComparators);
+		_moteViewCalculated = true;
 	}
+
+	// Return a filtered and sorted paginated view of motes from within our parent page via this column.
+	// There are three ways to use this, depending on parameter passed:
+	// pageNum: fetch page 0-n of results, each containing {capacity} items (or 0).
+	// afterMoteId: fetch {capacity} motes after the entry with id {afterMoteId} (exclusive) - requires default mote ID sorting
+	// afterIndex: fetch {capacity} motes after entry with index {afterIndex} (exclusive)
+	List<Mote> getMoteViewPage({ int? pageNum, int? afterMoteId, int? afterIndex, int capacity = 20, bool unpaginated = false }) {
+		if (!_moteViewCalculated) {
+			throw Exception("Mote view uninitialized - calculateMoteView() must be called before use!");
+		}
+		if (capacity <= 0) {
+			throw Exception("Invalid page capacity in getMoteViewPage");
+		}
+		if (_moteView.length == 0) {
+			return [];
+		}
+		if (unpaginated) {
+			return _moteView;
+		}
+
+		int? start, end;
+		if (pageNum != null) {      // (page number 0 starts at 0, ends at 19)
+			start = (pageNum * capacity);
+			end = start + capacity - 1;
+		}
+		if (afterMoteId != null) {
+			for (int idx = 0; idx < _moteView.length; idx++) {
+				if (_moteView[idx].id > afterMoteId) {
+					start = idx;
+					end = start + capacity - 1;
+					break;
+				}
+			}
+		}
+		if (afterIndex != null) {
+			start = afterIndex + 1;
+			end = start + capacity - 1;
+		}
+
+		if (start == null || end == null) {
+			throw Exception("Invalid use of getMoteViewPage - must specify pagination parameter!");
+		}
+		if (end > _moteView.length)
+			end = _moteView.length;
+		return _moteView.sublist(start, end);
+	}
+
+
+
 
 	// Filtering function for a single mote to check if it passes all 'filters'.
 	bool _filterWhere(Mote m) {

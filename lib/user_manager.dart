@@ -30,6 +30,29 @@ class UserManager {
 		return _attribCache[uid] ?? "#$uid";
 	}
 
+	// Force-load attribution for a list of user IDs. This will query for any
+	// user IDs not in cache, and async-fetch their attribution. Usually only
+	// used for specific places (e.g. user-references) where we want to check
+	// we have all attribution info loaded.
+	Future<void> ensureCachedAttribution(List<int> userIds) async {
+		// If we have all ids cached, we can exit early.
+		if (userIds.isEmpty || userIds.every((id) => _userCache.containsKey(id) || _attribCache.containsKey(id))) {
+			return;
+		}
+
+		final uids = userIds.map((id) => id.toString()).toList();
+		final apiAttrib = await InstanceManager().apiRequest('users/attrib', { 'uids[]': uids });
+		if (!apiAttrib.success(APIResponseJSON.map)) {
+			throw Exception("Attribution request failed for user lookup!");
+		}
+		final apiAttribMap = apiAttrib.result as Map<String, dynamic>;      // Returned data is keyed by user ID.
+		for (var attribEntry in apiAttribMap.values) {
+			var attribObj = attribEntry as Map<String, dynamic>;
+			_attribCache[attribObj['id']] = attribObj['name'];
+		}
+		return;
+	}
+
 	// Incorporate an 'attrib' structure from APIResponse returns, which are
 	// automatically sent along with some responses to point UIDs to Usernames.
 	autoloadAttribution(APIResponse apiResponse) {
@@ -46,11 +69,17 @@ class UserManager {
 		}
 		// Attrib hashmap should be a JSON map of objects, e.g. { 1: { id: 1, name: Abc }, 2: ... }
 		final attribHashmap = (resultMap.containsKey('attrib') ? resultMap['attrib'] : resultMap['attribution']) as Map<String, dynamic>;
-		for (var attribVal in attribHashmap.values) {
+		autoloadAttributionMap(attribHashmap);
+	}
+
+	// Autoload JSON data of cattribution from a map manually - usually from JSON.
+	autoloadAttributionMap(Map<String, dynamic> attribMap) {
+		for (var attribVal in attribMap.values) {
 			if (attribVal is! Map || !attribVal.containsKey('id') || !attribVal.containsKey('name')) {
 				continue;
 			}
 			_attribCache[attribVal['id']] = attribVal['name'];
 		}
 	}
+
 }

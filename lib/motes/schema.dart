@@ -1,7 +1,8 @@
-import 'dart:collection';
+import 'package:collection/collection.dart';
 import 'dart:convert';
 import 'field.dart';
 import 'mote.dart';
+import 'mote_relation.dart';
 
 // Representation of a schema type. Schemas can be referred to as either an integer ID,
 // or as a unique string type name. They are stored in the instance manager.
@@ -46,6 +47,12 @@ class Schema {
 		}
 	}
 
+	// Fetch field by name in spec if possible.
+	Field? tryGetField(String fieldTypeName) {
+		fieldTypeName = fieldTypeName.toLowerCase().trim();
+		return spec.firstWhereOrNull((f) => f.field.toLowerCase().trim() == fieldTypeName);
+	}
+
 	// Common fields that exist in all mote schema types.
 	static const List<String> commonFields = [ 'title' ];
 
@@ -74,6 +81,18 @@ class Schema {
 				return '';
 			}
 			// TODO: Deal with internal JSON, all other field constructs, etc.
+			if (field.isReference) {
+				final relations = mote.payload[fieldKey] as List<MoteRelation>;
+				return relations.map((relation) {
+					if (relation.isUserTarget) {
+						return relation.referencedTarget;
+					} else {
+						if (relation.referencedTarget == null)
+							return "#UNKNOWN#";
+						return (relation.referencedTarget as Mote).payload['title'];
+					}
+				}).toList().join(';');
+			}
 			return mote.payload[fieldKey]!.toString();
 		}).toList();
 

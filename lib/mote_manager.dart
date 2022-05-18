@@ -24,6 +24,11 @@ class MoteManager {
 		}
 	}
 
+	// Fetch a cached mote if it exists, or return null.
+	Mote? getCache(int id) {
+		return _moteCache[id];
+	}
+
 	// Fetch a single mote as given by the mote ID and a group ID. Usually used only for looking up relations,
 	// as we normally fetch a sequence given by a page or something else.
 	Future<Mote> fetchMote(int id, int gid) async {
@@ -51,11 +56,13 @@ class MoteManager {
 		}
 
 		// Otherwise fetch a list of motes using our API.
+		print("fetchMote: remote fetching ${toFetch.length} motes...");
 		try {
 			final List<String> toFetchStr = toFetch.map((e) => e.toString()).toList();
 			final fetchRequest = await InstanceManager().apiRequest('motes/relationMotes', {
 				"ids[]": toFetchStr,
 				'gid': gid.toString(),
+				'full': '1',
 			});
 			if (!fetchRequest.success(APIResponseJSON.list)) {
 				throw Exception("Failed to fetch mote sequence (error " + fetchRequest.response.statusCode.toString() + ")");
@@ -76,19 +83,24 @@ class MoteManager {
 
 			// Single-threaded implementation.
 			var timerInterpret = Stopwatch()..start();
+			int timerCounter = 0;
 			for (var m in fetchMotes) {
 				try {
 					Mote initializedMote = Mote.fromEncryptedJson(m);
 					await initializedMote.decryptMote();
 					returnMotes.add(initializedMote);
 					_moteCache[initializedMote.id] = initializedMote;
+					if (timerCounter++ > 100) {
+						timerCounter = 0;
+						print("fetchMote: Processed chunk of 100 motes [elapsed ${timerInterpret.elapsedMilliseconds}ms]");
+					}
 				} catch (ex) {
 					// On failure of initializing a mote (JSON decode / encryption), we 'fetch' nothing.
 					print(ex);
 				}
 			}
 			timerInterpret.stop();
-			print("Elapsed decrypt/interpret (single-thread): " + timerInterpret.elapsedMilliseconds.toString() + "ms.");
+			print("fetchMote: Elapsed decrypt/interpret (single-thread): ${timerInterpret.elapsedMilliseconds} ms.");
 
 			return returnMotes;
 		} catch (ex) {
@@ -107,6 +119,8 @@ class MoteManager {
 		final List<dynamic> jsonMotes = (apiPage.result as Map<String, dynamic>)['motes'] ?? [];
 		final List<Mote> returnMotes = [];
 		// TODO: Multithread this?
+		print("Autoload: Processing ${jsonMotes.length} motes from page data.");
+		var timerInterpret = Stopwatch()..start();
 		for (var jsonMote in jsonMotes) {
 			try {
 				Mote initializedMote = Mote.fromEncryptedJson(jsonMote);
@@ -118,6 +132,8 @@ class MoteManager {
 				print(ex);
 			}
 		}
+		timerInterpret.stop();
+		print("Autoload: Elapsed decrypt/interpret (single-thread): ${timerInterpret.elapsedMilliseconds} ms.");
 
 		return returnMotes;
 	}
