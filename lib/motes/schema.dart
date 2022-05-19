@@ -54,7 +54,7 @@ class Schema {
 	}
 
 	// Common fields that exist in all mote schema types.
-	static const List<String> commonFields = [ 'title' ];
+	static const List<String> commonFields = [ 'title', 'id' ];
 
 	// Generate (cached) CSV representation of this mote's payload headers, for our UI layer.
 	String get schemaHeadersCSV => _cachedHeadersCSV == null ? _schemaHeadersCSV() : _cachedHeadersCSV!;
@@ -97,6 +97,9 @@ class Schema {
 		}).toList();
 
 		orderedPayload.addAll(commonFields.map((commonField) {
+			if (commonField == 'id') {
+				return mote.id.toString();
+			}
 			return mote.payload[commonField] ?? '';
 		}));
 
