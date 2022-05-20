@@ -18,6 +18,7 @@ class Mote with MoteCrypto {
 	int seqId = 0;                  // Version sequence ID, incremented by one each update.
 	String dockey = "";             // Dockey for ourselves as B64 (we don't store generated dockeys for others)
 	String payloadEncrypted = "";   // Encrypted payload as String JSON.
+	int timestamp = 0;              // UNIX timestamp of the mote creation date.
 
 	// Targeting for motes
 	int sourceId = 0;               // Source user this mote is from
@@ -40,6 +41,7 @@ class Mote with MoteCrypto {
 		groupType = (json['group_type'] ?? 0) == 0 ? false : true;
 		domainId = json['domain_id'] ?? 0;
 		folderId = json['folder_id'] ?? 0;
+		timestamp = json['timestamp'] ?? 0;
 		relationships = json['relationships'] == null ? [] :
 			(json['relationships'] as List).map((r) => MoteRelation.fromMoteJson(r, this)).toList();
 		// Motes may also contain internal attribution info if from specific sources,
