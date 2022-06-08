@@ -5,6 +5,10 @@ class Filter {
 	late String fieldName;      // Field name we are filtering on.
 	dynamic term;               // What term to filter on. May be null, which will be ignored.
 
+	// Cached regular expression that may or may not apply. We use a simple static cache pattern.
+	static RegExp? cachedRegExp;
+	static String? cachedRegExpTerm;
+
 	Filter.andFilter(this.fieldName, this.term);
 
 	// Check if this filter passes a specific mote or not.
@@ -14,9 +18,13 @@ class Filter {
 		}
 		// TODO: Replace with typing system from Field!
 		final dynamic moteValue = m.payload[fieldName];     // (may be null)
-		// String comparison can just be matching
+		// String comparison can just be matching, but we need to use a regexp for case-insensitivity.
 		if (term is String && moteValue is String) {
-			return moteValue.contains(term);
+			if (cachedRegExp == null || cachedRegExpTerm != term) {
+				cachedRegExpTerm = term;
+				cachedRegExp = RegExp(RegExp.escape(term), caseSensitive: false);
+			}
+			return moteValue.contains(cachedRegExp!);
 		}
 		// Otherwise fall back to int and double comparisons
 		if ((term is int && moteValue is int) || (term is double && moteValue is double)) {
