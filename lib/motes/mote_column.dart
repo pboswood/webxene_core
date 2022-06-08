@@ -103,9 +103,6 @@ class MoteColumn {
 		return _moteView.sublist(start, end);
 	}
 
-
-
-
 	// Filtering function for a single mote to check if it passes all 'filters'.
 	bool _filterWhere(Mote m) {
 		// Always enforce a filter for schema types since we are dealing with the raw mote feed.

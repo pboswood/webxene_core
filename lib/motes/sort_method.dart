@@ -1,4 +1,5 @@
 import 'mote.dart';
+import 'package:collection/collection.dart';
 
 class SortMethod {
 	// Sort methods always are sorted by 'ascending' or 'descending' modes.
@@ -13,15 +14,16 @@ class SortMethod {
 		// TODO: Replace with typing system from Field!
 		dynamic valueA = a.payload[fieldName];      // (may be null)
 		dynamic valueB = b.payload[fieldName];
+		int result = 0;
 
 		// For now, we always sort by simple string comparison unless we know this is a number.
 		valueA ??= ''; valueB ??= '';
 		if (valueA is num && valueB is num) {
-			return valueA == valueB ? 0 : (valueA > valueB ? 1 : -1);
+			result = valueA == valueB ? 0 : (valueA > valueB ? 1 : -1);
+		} else {
+			result = compareAsciiLowerCaseNatural(valueA, valueB);
 		}
-		valueA = valueA.toString();
-		valueB = valueB.toString();
-		return valueA.compareTo(valueB);
+		return isAscending ? result : (0 - result);
 	}
 
 	// Provides the default 'sort' mode fallback for all motes, executed if no sort method is provided.
