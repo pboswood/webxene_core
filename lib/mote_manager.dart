@@ -1,7 +1,10 @@
 import 'dart:convert';
 import 'auth_manager.dart';
 import 'instance_manager.dart';
+import 'motes/field.dart';
+import 'motes/filter.dart';
 import "motes/mote.dart";
+import 'motes/schema.dart';
 
 class MoteManager {
 	static MoteManager? _instance;
@@ -134,6 +137,43 @@ class MoteManager {
 		}
 		timerInterpret.stop();
 		print("Autoload: Elapsed decrypt/interpret (single-thread): ${timerInterpret.elapsedMilliseconds} ms.");
+
+		return returnMotes;
+	}
+
+	// Search globally for a series of motes, constrained by type. This is a global search that
+	// is not constrained by fields (like filters) but looks in every indexed field/title entry instead.
+	Future<List<Mote>> searchMoteGlobalIndex({ required int groupId, required List<String> searchTerms, List<Schema>? moteTypes }) async {
+		final params = {
+			'terms[]': searchTerms,
+			'group_id': groupId.toString(),
+		};
+		if (moteTypes != null) {
+			params['type_ids[]'] = moteTypes.map((s) => s.id.toString()).toList();
+		}
+		final searchRequest = await InstanceManager().apiRequest('moteindex/search', params, 'POST');
+		if (!searchRequest.success(APIResponseJSON.list)) {
+			throw Exception("Failed to fetch mote global index search (error " + searchRequest.response.statusCode.toString() + ")");
+		}
+
+		Filter globalFilter = Filter.globalFilter(searchTerms);
+		
+		List<Mote> returnMotes = [];
+		for (var searchMote in (searchRequest.result as List)) {
+			try {
+				Mote initializedMote = Mote.fromEncryptedJson(searchMote);
+				await initializedMote.decryptMote();
+				_moteCache[initializedMote.id] = initializedMote;
+				// Discard this mote if it doesn't pass our search request fully.
+				if (!globalFilter.passes(initializedMote)) {
+					continue;
+				}
+				returnMotes.add(initializedMote);
+			} catch (ex) {
+				// On failure of initializing a mote (JSON decode / encryption), warn but continue.
+				print(ex);
+			}
+		}
 
 		return returnMotes;
 	}
