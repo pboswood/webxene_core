@@ -120,7 +120,13 @@ class InstanceManager {
 				enclavePath = 'enclave/' + enclavePath;
 				break;
 			default:
-				throw Exception("Undefined enclave for hostname '${_instanceHost}; pre-defined settings are required for now!");
+				// Match *.webxene.com and *.xemino.ch addresses - should we just assume this is generic for all unmatched?
+				if (_instanceHost.endsWith('webxene.com') || _instanceHost.endsWith('xemino.ch')) {
+					enclaveRoot = _instanceHost;
+					enclavePath = 'enclave/' + enclavePath;
+					break;
+				}
+				throw Exception("Undefined enclave for hostname ${_instanceHost}; pre-defined settings are required for now!");
 		}
 
 		final bool useUnsecure = _instanceConfig['DEBUG_HTTP'] ?? false;
