@@ -1,7 +1,10 @@
 // Singleton class to store instance and configuration details.
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart' as http_parser;
 import 'package:webxene_core/auth_manager.dart';
+import 'motes/attachment.dart';
 import 'motes/schema.dart';
 
 class InstanceManager {
@@ -47,15 +50,19 @@ class InstanceManager {
 			scheme: useUnsecure ? 'http' : 'https',
 			host: _instanceHost,
 			path: 'api/' + (route.substring(0, 1) == '/' ? route.substring(1) : route),
-			queryParameters:  parameters,
+			queryParameters:  method != 'GET' ? {} : parameters,
 		);
 	}
 
 	// Make an async API request to an endpoint along with any authorization required.
 	// Returns an APIResponse containing the original HTTP request as well as JSON result.
 	// Note: the parameters, if a list, must be a String subclass, i.e. List<int> will NOT work!
-	Future<APIResponse> apiRequest(String route, [Map<String, dynamic>? parameters, String method = 'GET']) {
+	// Note: as a general rule, in GET requests arrays must be 'field[]', while in POST bodies just 'field' will work since these are JSON transmitted.
+	Future<APIResponse> apiRequest(String route, [Map<String, dynamic>? parameters, String method = 'GET', Map<String, Attachment>? multipartFiles ]) {
 		method = method.toUpperCase().trim();
+		if (method != 'POST' && multipartFiles != null) {
+			throw Exception("Invalid file-upload request with non-POST apiRequest");
+		}
 		if (method != 'GET') {
 			parameters ??= {};
 			parameters.putIfAbsent('_method', () => method);        // Add laravel-specific _method handling for PUT/etc. to simulate HTTP forms.
@@ -63,12 +70,38 @@ class InstanceManager {
 		final reqPath = InstanceManager().apiPath(route, parameters, method);
 		final reqHeaders = {
 			...AuthManager().authTokenHeaders,
-			'Accept': 'application/json'
+			'Accept': 'application/json',
+			'Content-Type': 'application/json'
 		};
+		if (multipartFiles != null && method == 'POST') {
+			reqHeaders.remove('Content-Type');      // Won't work with a multipart, obviously.
+			final reqHttpMultipart = http.MultipartRequest(method, reqPath);
+			reqHttpMultipart.headers.addAll(reqHeaders);
+			for (MapEntry filePairs in multipartFiles!.entries) {
+				var attachment = filePairs.value as Attachment;
+				if (attachment.encryptedBytes == null) {
+					continue;
+				}
+				reqHttpMultipart.files.add(http.MultipartFile.fromBytes(filePairs.key, attachment.encryptedBytes!,
+					filename: attachment.filename, contentType: http_parser.MediaType.parse(attachment.mime)
+				));
+			}
+			for (MapEntry paramPairs in parameters!.entries) {
+				reqHttpMultipart.fields[paramPairs.key] = paramPairs.value as String;       // TODO: What about not being able to cast?
+			}
+			var multipartRequest = reqHttpMultipart.send();
+			return apiMultipartExecute(multipartRequest);
+		}
 		final reqHttp = method == 'GET' ?
 			http.get(reqPath, headers: reqHeaders) :
 			http.post(reqPath, headers: reqHeaders, body: (parameters is String ? parameters : jsonEncode(parameters)));
 		return reqHttp.then((response) => APIResponse(response));
+	}
+
+	Future<APIResponse> apiMultipartExecute(Future<http.StreamedResponse> streamedResponse) async {
+		var responseStream = await streamedResponse;
+		var responseObj = await http.Response.fromStream(responseStream);
+		return APIResponse(responseObj);
 	}
 
 	// Make an async request to an enclave endpoint via our API, used for key backup/recovery operations.
@@ -82,6 +115,7 @@ class InstanceManager {
 				enclaveRoot = 'netxene-enclave.cirii.org';
 				break;
 			case 'crm.sevconcept.ch':
+			case 'demo.xemino.ch':
 				enclaveRoot = _instanceHost;
 				enclavePath = 'enclave/' + enclavePath;
 				break;
@@ -103,6 +137,31 @@ class InstanceManager {
 			body: jsonEncode(parameters),       // Our scripts require JSON input at the moment
 		);
 		return enclaveRequest;
+	}
+
+	// Make an async request to our storage to fetch an attachment 'asset' as encrypted bytes.
+	// Returns the raw HTTP response. The remoteURL MUST start with '/storage/' or 'storage/' to be valid!
+	Future<http.Response> assetRequestRaw(String remoteUrl) {
+		if (_instanceHost == "") {          // setupInstance MUST be called first!
+			throw Exception("Instance manager has no host setup!");
+		}
+		if (remoteUrl.startsWith('/')) {
+			remoteUrl = remoteUrl.substring(1);
+		}
+		if (!remoteUrl.startsWith('storage/')) {
+			throw Exception("Invalid asset URL passed to request - must start with storage root");
+		}
+		final bool useUnsecure = _instanceConfig['DEBUG_HTTP'] ?? false;
+		final assetPath = Uri(
+			scheme: useUnsecure ? 'http' : 'https',
+			host: _instanceHost,
+			path: remoteUrl,
+		);
+		final assetHeaders = {
+			...AuthManager().authTokenHeaders,
+		};
+		final assetHttp = http.get(assetPath, headers: assetHeaders);
+		return assetHttp;
 	}
 
 	// Fetch common environmental variables used in instance configuration.

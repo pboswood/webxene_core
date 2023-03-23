@@ -107,4 +107,17 @@ class Schema {
 
 		return orderedPayload.join(';');
 	}
+
+	// Initialize a blank mote with the defaults as set in this schema.
+	void setMoteDefaults(Mote mote, { String? title }) {
+		for (Field f in spec) {
+			f.setDefaultValue(mote);
+		}
+		// If title does not exist, always set it to empty string or given title.
+		if (!mote.payload.containsKey('title')) {
+			mote.payload['title'] = title == null ? '' : title;
+		} else if (title != null) {    // Otherwise override only if we have data.
+			mote.payload['title'] = title;
+		}
+	}
 }

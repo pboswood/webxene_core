@@ -26,6 +26,12 @@ class MoteManager {
 			}
 		}
 	}
+	// Manually cache a mote (used for updates and store returns which auto-cache)
+	forceCacheMote(Mote m) {
+		if (m.id != 0) {
+			_moteCache[m.id] = m;
+		}
+	}
 
 	// Fetch a cached mote if it exists, or return null.
 	Mote? getCache(int id) {
@@ -63,7 +69,7 @@ class MoteManager {
 		try {
 			final List<String> toFetchStr = toFetch.map((e) => e.toString()).toList();
 			final fetchRequest = await InstanceManager().apiRequest('motes/relationMotes', {
-				"ids[]": toFetchStr,
+				'ids[]': toFetchStr,
 				'gid': gid.toString(),
 				'full': '1',
 			});
@@ -145,11 +151,11 @@ class MoteManager {
 	// is not constrained by fields (like filters) but looks in every indexed field/title entry instead.
 	Future<List<Mote>> searchMoteGlobalIndex({ required int groupId, required List<String> searchTerms, List<Schema>? moteTypes }) async {
 		final params = {
-			'terms[]': searchTerms,
+			'terms': searchTerms,
 			'group_id': groupId.toString(),
 		};
 		if (moteTypes != null) {
-			params['type_ids[]'] = moteTypes.map((s) => s.id.toString()).toList();
+			params['type_ids'] = moteTypes.map((s) => s.id.toString()).toList();
 		}
 		final searchRequest = await InstanceManager().apiRequest('moteindex/search', params, 'POST');
 		if (!searchRequest.success(APIResponseJSON.list)) {
@@ -177,4 +183,70 @@ class MoteManager {
 
 		return returnMotes;
 	}
+
+	// Create/Update a mote from a mote object. This can be an existing mote, or a new blank mote from the
+	// Mote.fromBlank constructor.
+	Future<Mote> saveMote(Mote mote) async {
+		if (!mote.groupType) {          // TODO: Implement non-group mote updates!
+			throw "Unimplemented: non-group mote updates";
+		} else if (mote.typeId <= 0) {  // TODO: Implement handling for schema-less motes!
+			throw "Unimplemented: non-schema mote updates";
+		}
+
+		// Validate mote is allowed to be saved in this form. Require it has a title, etc.
+		if (!mote.payload.containsKey('title') || mote.payload['title'].toString().trim() == '') {
+			throw "Mote is missing title in payload, unable to save #${mote.id}";
+		}
+		// TODO: Validation at field levels, etc.
+
+		// TODO: What about relationships? Parent-relationships?
+		// TODO: Handling or warning for: prefixes, email-integrations, uniqueness checks, series-updates
+		// TODO: Indexing generation?
+
+		// Re-integrate our attachments into the mote payload.
+		mote.generateAttachments();
+
+		await mote.encryptMote();
+		if (mote.encryptedCommit == null) {
+			throw "Failed to generate mote commit for update";
+		}
+
+		final ownKeyId = AuthManager().loggedInUser.cryptoKeys.internalKeyId;
+		final ownDockey = ownKeyId == 0 ? null : mote.encryptedCommit!.item2[ownKeyId];
+		if (ownDockey == null) {
+			throw Exception("Failed to isolate own dockey for logged in key after update of mote.");
+		}
+		final ownDockeyB64 = jsonDecode(ownDockey)[2];       // Parse directly from [uid,kid,base64] representation.
+
+		final commitUrl = mote.isUnsaved ? "motes" : "motes/${mote.id}";
+		final commitRequest = await InstanceManager().apiRequest(commitUrl, {
+			'group_id': mote.targetId.toString(),
+			'page_id': mote.domainId.toString(),
+			'payload': mote.encryptedCommit!.item1,
+			'dockeys': mote.encryptedCommit!.item2.values.toList(),
+			'schema': mote.typeId.toString(),
+			'indexing': [],             // TODO: Implement!
+			'series-updates': [],       // TODO: Implement!
+			'parent': mote.parentRelationAsPostArray,
+			'_method': mote.isUnsaved ? 'POST' : 'PATCH',
+		}, 'POST');
+		if (!commitRequest.success(APIResponseJSON.map)) {
+			throw Exception("Failed to save mote (error ${commitRequest.response.statusCode}: ${commitRequest.response.reasonPhrase}");
+		}
+
+		// Invalidate mote cache and replace with returned data.
+		if (mote.id != 0) {
+			MoteManager().invalidateMote(mote.id);
+		}
+		// If parent-relationship was created, invalidate the parent mote as well.
+		if (mote.parentRelationAsMoteId > 0) {
+			MoteManager().invalidateMote(mote.parentRelationAsMoteId);
+		}
+		final savedMote = Mote.fromEncryptedJson(commitRequest.result, overrideDockey: ownDockeyB64);
+		await savedMote.decryptMote();
+		forceCacheMote(savedMote);
+		return savedMote;
+	}
+
+
 }

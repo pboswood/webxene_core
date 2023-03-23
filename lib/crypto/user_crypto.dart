@@ -8,6 +8,19 @@ class UserCryptoKeys {
 	RsaOaepPublicKey? encryptPublic;            // RSA public key, as set by FetchPublicKeys()
 	RsassaPkcs1V15PrivateKey? signPrivate;      // RSA-SSA signing private key, as set by DecryptSecureKey()
 	RsassaPkcs1V15PublicKey? signPublic;        // RSA-SSA signing public key, as set by FetchPublicKeys()
+	int internalKeyId = 0;                      // NetXene keypair ID used for certain operations, not related to user ID. 0 if unset.
+	int internalUserId = 0;                     // Netxene user ID used for certain operations, not related to key ID. 0 if unset.
+
+	Future<void> ImportPublicJSON(String encPublicStr, String signPublicStr, int keyId, int userId) async {
+		try {
+			internalKeyId = keyId;
+			internalUserId = userId;
+			encryptPublic = await RsaOaepPublicKey.importJsonWebKey(jsonDecode(encPublicStr), Hash.sha1);
+			signPublic = await RsassaPkcs1V15PublicKey.importJsonWebKey(jsonDecode(signPublicStr), Hash.sha256);
+		} catch (ex) {
+			throw "Failed to create user's public crypto keys from JSON string!";
+		}
+	}
 }
 
 mixin UserCrypto {

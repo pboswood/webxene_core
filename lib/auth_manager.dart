@@ -1,5 +1,6 @@
 // Singleton class to store authentication details for current user.
 import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tuple/tuple.dart';
 import 'users/user.dart';
 import "instance_manager.dart";
@@ -63,7 +64,7 @@ class AuthManager {
 
 	// Temporary login sequence that bypasses AuthState to do everything in one step.
 	// TODO: Fix this to use separate pages, as required by 2FA/TOTP and other uses.
-	Future<void> runSingleStageLogin(String username, String password) async {
+	Future<void> runSingleStageLogin(String username, String password, { bool rememberSession = false }) async {
 		try {
 			// Lookup recognition for this username to get uid, etc.
 			await lookupLoginDetails(username);
@@ -93,7 +94,14 @@ class AuthManager {
 			// TODO: Implement proper securecode lookup for non-defaults!
 			await loggedInUser.DecryptSecurekey(InstanceManager().defaultSecurecode, keypairRecovered['pbkdf2_iter'], keypairRecovered['pbkdf2_salt'], keypairRecovered['aesEncrypted'], keypairRecovered['hmac']);
 			print("Unlocked remote keypair successfully with securecode. Crypto operations now live for user ${loggedInUser.id}.");
+			loggedInUser.cryptoKeys.internalKeyId = keypairRemote.id;
+			loggedInUser.cryptoKeys.internalUserId = loggedInUser.id;
 			state = AuthState.complete;
+
+			// Save to session memory if needed - this will automatically serialize anything it needs
+			if (rememberSession) {
+				await saveRememberedCredentials();
+			}
 		} on NotFoundException {
 			rethrow;
 		} catch (ex) {
@@ -206,5 +214,26 @@ class AuthManager {
 			}
 		}
 		 */
+
+	// Save existing Auth session to app storage after successful login, overwriting any existing session.
+	Future<bool> saveRememberedCredentials() async {
+		// Save: _recognition
+		// Save: loggedInUser
+		// Save: _apiToken
+		// Save: encrypted keypair, i.e. keypairRecovered (and not decrypted one!)
+		return false;
+	}
+
+	// Check to see if we have saved 'remembered login' credentials.
+	Future<bool> tryLoadRememberedCredentials() async {
+		final prefs = await SharedPreferences.getInstance();
+		final String? loadedUser = prefs.getString('NX_USER');
+		final String? loadedKey = prefs.getString('NX_AUTH');
+		if (loadedUser == null || loadedKey == null) {
+			return false;
+		}
+		// TODO: Implement!
+		return false;
+	}
 
 }
